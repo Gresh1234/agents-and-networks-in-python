@@ -79,6 +79,9 @@ target/
 # exclude data from source control by default
 # /data/
 
+# exclude external OSM data from source control
+/data/external/OSM
+
 # Mac OS-specific storage files
 .DS_Store
 

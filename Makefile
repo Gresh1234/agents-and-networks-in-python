@@ -5,25 +5,80 @@
 #################################################################################
 
 PROJECT_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
-BUCKET = [OPTIONAL] your-bucket-for-syncing-data (do not include 's3://')
 PROFILE = default
-PROJECT_NAME = gmu-social-in-python
-PYTHON_INTERPRETER = python3
+PROJECT_NAME = zorzim
+PACKAGE_NAME = zorzim
+ENV_NAME = zorzim
+SRC_CODE_FOLDER = src/zorzim
+PYTHON_INTERPRETER = python
+CURRENT_ENV := $(CONDA_DEFAULT_ENV)
 
-ifeq (,$(shell which conda))
+ifeq (,$(shell which mamba))
 HAS_CONDA=False
 else
 HAS_CONDA=True
+CONDA := $(shell which mamba)
+ifeq ($(CONDA_DEFAULT_ENV),$(ENV_NAME))
+ENV_IS_ACTIVE=True
+else
+ENV_IS_ACTIVE=False
+endif
 endif
 
 #################################################################################
 # COMMANDS                                                                      #
 #################################################################################
 
+## create conda environment
+conda-create-env:
+ifeq (True,$(HAS_CONDA))
+	@printf ">>> Creating '$(ENV_NAME)' conda environment. This could take a few minutes ...\n\n"
+	@$(CONDA) env create --name $(ENV_NAME) --file environment.yml
+	@printf ">>> Adding the project to the environment...\n\n"
+else
+	@printf ">>> conda command not found. Check out that conda has been installed properly."
+endif
+
+## delete conda environment
+conda-delete-env:
+ifeq (True,$(HAS_CONDA))
+	@printf ">>> Deleting '$(ENV_NAME)' conda environment. This could take a few minutes ...\n\n"
+	@$(CONDA) env remove --name $(ENV_NAME)
+	@printf ">>> Done.\n\n"
+else
+	@printf ">>> conda command not found. Check out that conda has been installed properly."
+endif
+
+## update conda environment
+conda-update-env:
+ifeq (True,$(HAS_CONDA))
+	@printf ">>> Updating '$(ENV_NAME)' conda environment. This could take a few minutes ...\n\n"
+	@$(CONDA) env update --name $(ENV_NAME) --file environment.yml --prune
+	@printf ">>> Updated.\n\n"
+else
+	@printf ">>> conda command not found. Check out that conda has been installed properly."
+endif
+
+## install package in editable mode
+install-package:
+	conda run --name '$(ENV_NAME)' python -m pip install --editable .
+
+## uninstall package
+uninstall-package:
+	conda run --name '$(ENV_NAME)' python -m pip uninstall --yes '$(PACKAGE_NAME)'
+
+## install jupyter notebook kernel
+install-kernel:
+	conda run --name '$(ENV_NAME)' python -m ipykernel install --user --name '$(ENV_NAME)' --display-name "Python ($(ENV_NAME))"
+
+## download data from external sources
+download-external:
+	sh ./scripts/download_osm.sh
+
 ## Install Python Dependencies
 requirements: test_environment
 	$(PYTHON_INTERPRETER) -m pip install -U pip setuptools wheel
-	$(PYTHON_INTERPRETER) -m pip install -r requirements.txt
+	$(CONDA_DEFAULT_ENV) -m pip install -r requirements.txt
 
 ## Make Dataset
 data: requirements
@@ -34,46 +89,8 @@ clean:
 	find . -type f -name "*.py[co]" -delete
 	find . -type d -name "__pycache__" -delete
 
-## Lint using flake8
-lint:
-	flake8 src
-
-## Upload Data to S3
-sync_data_to_s3:
-ifeq (default,$(PROFILE))
-	aws s3 sync data/ s3://$(BUCKET)/data/
-else
-	aws s3 sync data/ s3://$(BUCKET)/data/ --profile $(PROFILE)
-endif
-
-## Download Data from S3
-sync_data_from_s3:
-ifeq (default,$(PROFILE))
-	aws s3 sync s3://$(BUCKET)/data/ data/
-else
-	aws s3 sync s3://$(BUCKET)/data/ data/ --profile $(PROFILE)
-endif
-
-## Set up python interpreter environment
-create_environment:
-ifeq (True,$(HAS_CONDA))
-		@echo ">>> Detected conda, creating conda environment."
-ifeq (3,$(findstring 3,$(PYTHON_INTERPRETER)))
-	conda create --name $(PROJECT_NAME) python=3
-else
-	conda create --name $(PROJECT_NAME) python=2.7
-endif
-		@echo ">>> New conda env created. Activate with:\nsource activate $(PROJECT_NAME)"
-else
-	$(PYTHON_INTERPRETER) -m pip install -q virtualenv virtualenvwrapper
-	@echo ">>> Installing virtualenvwrapper if not already installed.\nMake sure the following lines are in shell startup file\n\
-	export WORKON_HOME=$$HOME/.virtualenvs\nexport PROJECT_HOME=$$HOME/Devel\nsource /usr/local/bin/virtualenvwrapper.sh\n"
-	@bash -c "source `which virtualenvwrapper.sh`;mkvirtualenv $(PROJECT_NAME) --python=$(PYTHON_INTERPRETER)"
-	@echo ">>> New virtualenv created. Activate with:\nworkon $(PROJECT_NAME)"
-endif
-
 ## Test python environment is setup correctly
-test_environment:
+test-environment:
 	$(PYTHON_INTERPRETER) test_environment.py
 
 #################################################################################
